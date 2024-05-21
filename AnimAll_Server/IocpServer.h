@@ -34,16 +34,9 @@ typedef struct _PER_IO_CONTEXT {
     int                         nTotalBytes;            // 데이터의 총량
     int                         nSentBytes;             // 이미 송수신된 바이트 수, 진행 상태 추적
     IO_OPERATION                IOOperation;            // I/O 작업의 유형
-    //SOCKET                      SocketAccept;
 
     struct _PER_IO_CONTEXT* pIOContextForward;  // 다음 I/O 컨텍스트
 } PER_IO_CONTEXT, * PPER_IO_CONTEXT;
-
-//
-// AcceptEx의 경우, IOCP 키는 수신 소켓의 PER_SOCKET_CONTEXT입니다.
-// 따라서 PER_IO_CONTEXT에 SocketAccept라는 다른 필드가 필요합니다.
-// 진행 중인 AcceptEx가 완료되면, 이 필드는 우리의 연결 소켓 핸들이 됩니다.
-//
 
 //
 // IOCP에 추가된 모든 소켓(완료 포트와 연결된 소켓)에 관련된 데이터
@@ -51,11 +44,7 @@ typedef struct _PER_IO_CONTEXT {
 typedef struct _PER_SOCKET_CONTEXT {
     SOCKET                      Socket;
 
-    //LPFN_ACCEPTEX               fnAcceptEx;
-
-    //
     // 소켓의 모든 I/O 작업을 위한 이중 연결 리스트
-    //
     PPER_IO_CONTEXT             pIOContext;     // 소켓에 할당된 I/O 작업 리스트
     struct _PER_SOCKET_CONTEXT* pCtxtBack;      // 소켓 관리를 위한 리스트
     struct _PER_SOCKET_CONTEXT* pCtxtForward;
@@ -75,7 +64,7 @@ BOOL CreateAcceptSocket(
     BOOL fUpdateIOCP
 );
 
-DWORD WINAPI WorkerThread(
+UINT WINAPI WorkerThread(
     LPVOID WorkContext
 );
 

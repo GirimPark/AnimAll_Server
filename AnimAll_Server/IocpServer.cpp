@@ -84,6 +84,7 @@
 #define xfree(p)   HeapFree(GetProcessHeap(),0,(p))
 
 #include <exception>
+#include <process.h>
 #include <stdexcept>
 #include <winsock2.h>
 #include <Ws2tcpip.h>
@@ -148,11 +149,14 @@ void __cdecl main(int argc, char* argv[]) {
 
 	InitializeCriticalSection(&g_CriticalSection);
 
-	while (g_bRestart) {
+	while (g_bRestart) 
+	{
 		g_bRestart = FALSE;
 		g_bEndServer = FALSE;
 
-		__try {
+		__try 
+		{
+			// 1. 완료 포트 생성
 			g_hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
 			if (g_hIOCP == NULL) {
 				myprintf("CreateIoCompletionPort() failed to create I/O completion port: %d\n",
@@ -160,18 +164,18 @@ void __cdecl main(int argc, char* argv[]) {
 				__leave;
 			}
 
+			// 2. 스레드 생성, 핸들 저장
 			for (DWORD dwCPU = 0; dwCPU < g_dwThreadCount; dwCPU++) {
 
 				//
-				// Create worker threads to service the overlapped I/O requests.  The decision
-				// to create 2 worker threads per CPU in the system is a heuristic.  Also,
-				// note that thread handles are closed right away, because we will not need them
-				// and the worker threads will continue to execute.
+				// 오버랩된 I/O 요청을 처리하기 위해 워커 스레드를 생성한다.
+				// 시스템의 CPU당 2개의 워커 스레드를 생성하기로 한 결정은 휴리스틱(경험적)이다.
+				// 또한, 워커 스레드가 계속 실행될 것이기 때문에 핸들이 더 이상 필요하지 않으므로 스레드 핸들은 바로 닫힌다.
 				//
 				HANDLE hThread = INVALID_HANDLE_VALUE;
-				DWORD dwThreadId = 0;
+				UINT dwThreadId = 0;
 
-				hThread = CreateThread(NULL, 0, WorkerThread, g_hIOCP, 0, &dwThreadId);
+				hThread = (HANDLE)_beginthreadex(NULL, 0, WorkerThread, NULL, 0, &dwThreadId);
 				if (hThread == NULL) {
 					myprintf("CreateThread() failed to create worker thread: %d\n",
 						GetLastError());
@@ -181,6 +185,7 @@ void __cdecl main(int argc, char* argv[]) {
 				hThread = INVALID_HANDLE_VALUE;
 			}
 
+			// 3. 리슨 소켓 생성
 			if (!CreateListenSocket())
 				__leave;
 
@@ -475,7 +480,7 @@ BOOL CreateListenSocket(void) {
 //
 // Worker thread that handles all I/O requests on any socket handle added to the IOCP.
 //
-DWORD WINAPI WorkerThread(LPVOID WorkThreadContext) {
+UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 
 	HANDLE hIOCP = (HANDLE)WorkThreadContext;
 	BOOL bSuccess = FALSE;
