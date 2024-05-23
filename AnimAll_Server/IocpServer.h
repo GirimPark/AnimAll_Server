@@ -58,6 +58,7 @@ BOOL WINAPI CtrlHandler(
     DWORD dwEvent
 );
 
+// 특정 도네임, 포트 정보로 주소 정보를 얻고 소켓을 생성, 설정한다.
 BOOL CreateListenSocket(void);
 
 BOOL CreateAcceptSocket(
@@ -68,6 +69,8 @@ UINT WINAPI WorkerThread(
     LPVOID WorkContext
 );
 
+// 소켓에 소켓 컨텍스트를 할당하여 완료 포트와 연결하고,
+// 소켓 컨텍스트를 목록에 추가한다.
 PPER_SOCKET_CONTEXT UpdateCompletionPort(
     SOCKET s,
     IO_OPERATION ClientIo,
@@ -84,6 +87,7 @@ VOID CloseClient(
     BOOL bGraceful
 );
 
+// 소켓 컨텍스트 생성, 초기화
 PPER_SOCKET_CONTEXT CtxtAllocate(
     SOCKET s,
     IO_OPERATION ClientIO

@@ -192,43 +192,42 @@ void __cdecl main(int argc, char* argv[]) {
 			while (TRUE) {
 
 				//
-				// Loop forever accepting connections from clients until console shuts down.
+				// 콘솔이 종료될 때까지 클라이언트들의 연결을 지속적으로 수락한다.
 				//
 				sdAccept = WSAAccept(g_sdListen, NULL, NULL, NULL, 0);
 				if (sdAccept == SOCKET_ERROR) {
 
 					//
-					// If user hits Ctrl+C or Ctrl+Brk or console window is closed, the control
-					// handler will close the g_sdListen socket. The above WSAAccept call will 
-					// fail and we thus break out the loop,
+					// 사용자가 Ctrl+C, Ctrl+Brk를 누르거나, 콘솔 윈도우를 닫으면 컨트롤 핸들러가 리슨 소켓을 닫는다.
+					// 위의 WSAAccept또한 실패하고, 루프에서 나간다.
 					//
 					myprintf("WSAAccept() failed: %d\n", WSAGetLastError());
 					__leave;
 				}
 
 				//
-				// we add the just returned socket descriptor to the IOCP along with its
-				// associated key data.  Also the global list of context structures
-				// (the key data) gets added to a global list.
+				// 우리는 방금 반환된 소켓 디스크립터를 그와 관련된 키 데이터와 함께 IOCP에 추가합니다.
+				// 또한, 전역 컨텍스트 구조체 목록(키 데이터)도 전역 목록에 추가됩니다.
 				//
 				lpPerSocketContext = UpdateCompletionPort(sdAccept, ClientIoRead, TRUE);
 				if (lpPerSocketContext == NULL)
 					__leave;
 
 				//
-				// if a CTRL-C was pressed "after" WSAAccept returns, the CTRL-C handler
-				// will have set this flag and we can break out of the loop here before
-				// we go ahead and post another read (but after we have added it to the 
-				// list of sockets to close).
+				// WSAAccept가 반환된 "후에" CTRL-C가 눌리면, CTRL-C 핸들러가 이 플래그를 설정할 것이고
+				// 우리는 다른 읽기 작업을 게시하기 전에(그러나 소켓을 닫기 위한 목록에 추가한 후에) 여기서 루프를 빠져나갈 수 있습니다.
 				//
 				if (g_bEndServer)
 					break;
 
 				//
-				// post initial receive on this socket
+				// 초기 수신 작업 게시
 				//
+				//nRet = WSARecv(sdAccept, &(lpPerSocketContext->pIOContext->wsabuf),
+				//	1, &dwRecvNumBytes, &dwFlags,
+				//	&(lpPerSocketContext->pIOContext->Overlapped), NULL);
 				nRet = WSARecv(sdAccept, &(lpPerSocketContext->pIOContext->wsabuf),
-					1, &dwRecvNumBytes, &dwFlags,
+					1, nullptr, &dwFlags,
 					&(lpPerSocketContext->pIOContext->Overlapped), NULL);
 				if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError())) {
 					myprintf("WSARecv() Failed: %d\n", WSAGetLastError());
@@ -242,7 +241,7 @@ void __cdecl main(int argc, char* argv[]) {
 			g_bEndServer = TRUE;
 
 			//
-			// Cause worker threads to exit
+			// 워커 스레드 종료
 			//
 			if (g_hIOCP) {
 				for (DWORD i = 0; i < g_dwThreadCount; i++)
@@ -250,13 +249,15 @@ void __cdecl main(int argc, char* argv[]) {
 			}
 
 			//
-			//Make sure worker threads exits.
+			// 확실하게 워커 스레드를 종료한다.
 			//
 			if (WAIT_OBJECT_0 != WaitForMultipleObjects(g_dwThreadCount, g_ThreadHandles, TRUE, 1000))
 				myprintf("WaitForMultipleObjects() failed: %d\n", GetLastError());
 			else
+				// 모든 스레드 핸들이 신호를 보냈다면
 				for (DWORD i = 0; i < g_dwThreadCount; i++) {
-					if (g_ThreadHandles[i] != INVALID_HANDLE_VALUE) CloseHandle(g_ThreadHandles[i]);
+					if (g_ThreadHandles[i] != INVALID_HANDLE_VALUE) 
+						CloseHandle(g_ThreadHandles[i]);
 					g_ThreadHandles[i] = INVALID_HANDLE_VALUE;
 				}
 
@@ -419,17 +420,9 @@ BOOL CreateListenSocket(void) {
 	}
 
 	//
-	// Disable send buffering on the socket.  Setting SO_SNDBUF
-	// to 0 causes winsock to stop buffering sends and perform
-	// sends directly from our buffers, thereby reducing CPU usage.
-	//
-	// However, this does prevent the socket from ever filling the
-	// send pipeline. This can lead to packets being sent that are
-	// not full (i.e. the overhead of the IP and TCP headers is 
-	// great compared to the amount of data being carried).
-	//
-	// Disabling the send buffer has less serious repercussions 
-	// than disabling the receive buffer.
+	// 소켓의 전송 버퍼링을 비활성화합니다. SO_SNDBUF를 0으로 설정하면 winsock이 전송 버퍼링을 중지하고, 우리 버퍼에서 직접 전송을 수행하여 CPU 사용량을 줄일 수 있습니다.
+	// 하지만, 이것은 소켓이 전송 파이프라인을 채우지 못하게 합니다.이로 인해 가득 차지 않은 패킷이 전송될 수 있으며, 이는 IP 및 TCP 헤더의 오버헤드가 전달되는 데이터 양에 비해 크게 되는 문제를 초래할 수 있습니다.
+	//	전송 버퍼를 비활성화하는 것은 수신 버퍼를 비활성화하는 것보다 덜 심각한 결과를 가져옵니다.
 	//
 	nZero = 0;
 	nRet = setsockopt(g_sdListen, SOL_SOCKET, SO_SNDBUF, (char*)&nZero, sizeof(nZero));
@@ -439,38 +432,28 @@ BOOL CreateListenSocket(void) {
 	}
 
 	//
-	// Don't disable receive buffering. This will cause poor network
-	// performance since if no receive is posted and no receive buffers,
-	// the TCP stack will set the window size to zero and the peer will
-	// no longer be allowed to send data.
+	// 수신 버퍼링을 비활성화하지 마십시오. 수신 버퍼링을 비활성화하면 네트워크 성능이 저하됩니다.
+	// 수신이 게시되지 않고 수신 버퍼가 없으면 TCP 스택이 창 크기를 0으로 설정하고 상대방은 더 이상 데이터를 보낼 수 없게 됩니다.
+	// 지속 시간 값을 설정하지 마십시오.특히 중단적 닫기로 설정하지 마십시오.
+	// 중단적 닫기로 설정하고 전송될 데이터가 조금 남아 있거나 상대방에게 확인되지 않은 데이터가 있는 경우
+	// 연결이 강제로 재설정되어 데이터 손실이 발생할 수 있습니다(즉, 상대방이 마지막 데이터를 받지 못할 수 있습니다).
+	// 이는 나쁜 상황입니다.악의적인 클라이언트가 연결한 후 데이터를 보내거나 받지 않는 상황이 걱정된다면
+	// 서버는 각 연결에 대해 타이머를 유지해야 합니다.
+	// 일정 시간이 지나 서버가 연결을 "정체" 상태로 간주하면 그때 지속 시간을 중단적으로 설정하고 연결을 닫을 수 있습니다.
 	//
+	// 정체 상태로 간주되는 클라이언트 소켓의 옵션을 변경
+	//LINGER lingerStruct;
 
-	// 
-	// Do not set a linger value...especially don't set it to an abortive
-	// close. If you set abortive close and there happens to be a bit of
-	// data remaining to be transfered (or data that has not been 
-	// acknowledged by the peer), the connection will be forcefully reset
-	// and will lead to a loss of data (i.e. the peer won't get the last
-	// bit of data). This is BAD. If you are worried about malicious
-	// clients connecting and then not sending or receiving, the server
-	// should maintain a timer on each connection. If after some point,
-	// the server deems a connection is "stale" it can then set linger
-	// to be abortive and close the connection.
-	//
+	//lingerStruct.l_onoff = 1;	// LINGER 옵션 활성화
+	//lingerStruct.l_linger = 0;	// 중단적 종료 : 소켓이 닫힐 때 즉시 연결을 종료하고, 남은 데이터를 전송하지 않는다.
 
-	/*
-	LINGER lingerStruct;
-
-	lingerStruct.l_onoff = 1;
-	lingerStruct.l_linger = 0;
-
-	nRet = setsockopt(g_sdListen, SOL_SOCKET, SO_LINGER,
-					  (char *)&lingerStruct, sizeof(lingerStruct) );
-	if( nRet == SOCKET_ERROR ) {
-		myprintf("setsockopt(SO_LINGER) failed: %d\n", WSAGetLastError());
-		return(FALSE);
-	}
-	*/
+	//nRet = setsockopt(g_sdListen, SOL_SOCKET, SO_LINGER,
+	//				  (char *)&lingerStruct, sizeof(lingerStruct) );
+	//if( nRet == SOCKET_ERROR ) {
+	//	myprintf("setsockopt(SO_LINGER) failed: %d\n", WSAGetLastError());
+	//	return(FALSE);
+	//}
+	
 
 	freeaddrinfo(addrlocal);
 
@@ -620,8 +603,8 @@ UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 }
 
 //
-//  Allocate a context structures for the socket and add the socket to the IOCP.  
-//  Additionally, add the context structure to the global list of context structures.
+//  소켓에 대한 컨텍스트 구조체를 할당하고 소켓을 IOCP에 추가합니다.
+//  또한, 컨텍스트 구조체를 글로벌 컨텍스트 구조체 목록에 추가합니다.
 //
 PPER_SOCKET_CONTEXT UpdateCompletionPort(SOCKET sd, IO_OPERATION ClientIo,
 	BOOL bAddToList) {
@@ -708,16 +691,9 @@ PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO) {
 
 	PPER_SOCKET_CONTEXT lpPerSocketContext;
 
-	__try
-	{
-		EnterCriticalSection(&g_CriticalSection);
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return NULL;
-	}
+	EnterCriticalSection(&g_CriticalSection);
 
+	// IOCP 키 초기화
 	lpPerSocketContext = (PPER_SOCKET_CONTEXT)xmalloc(sizeof(PER_SOCKET_CONTEXT));
 	if (lpPerSocketContext) {
 		lpPerSocketContext->pIOContext = (PPER_IO_CONTEXT)xmalloc(sizeof(PER_IO_CONTEXT));
@@ -762,15 +738,7 @@ VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 
 	PPER_SOCKET_CONTEXT     pTemp;
 
-	__try
-	{
-		EnterCriticalSection(&g_CriticalSection);
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return;
-	}
+	EnterCriticalSection(&g_CriticalSection);
 
 	if (g_pCtxtList == NULL) {
 
@@ -896,15 +864,7 @@ VOID CtxtListFree() {
 
 	PPER_SOCKET_CONTEXT     pTemp1, pTemp2;
 
-	__try
-	{
-		EnterCriticalSection(&g_CriticalSection);
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return;
-	}
+	EnterCriticalSection(&g_CriticalSection);
 
 	pTemp1 = g_pCtxtList;
 	while (pTemp1) {
