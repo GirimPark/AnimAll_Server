@@ -175,7 +175,8 @@ void __cdecl main(int argc, char* argv[]) {
 				HANDLE hThread = INVALID_HANDLE_VALUE;
 				UINT dwThreadId = 0;
 
-				hThread = (HANDLE)_beginthreadex(NULL, 0, WorkerThread, NULL, 0, &dwThreadId);
+				//void* argList = (g_hIOCP, lpPerSocketContext);
+				hThread = (HANDLE)_beginthreadex(NULL, 0, WorkerThread, g_hIOCP, 0, &dwThreadId);
 				if (hThread == NULL) {
 					myprintf("CreateThread() failed to create worker thread: %d\n",
 						GetLastError());
@@ -261,6 +262,7 @@ void __cdecl main(int argc, char* argv[]) {
 					g_ThreadHandles[i] = INVALID_HANDLE_VALUE;
 				}
 
+			// 컨텍스트 리스트를 정리하여 모든 소켓 컨텍스트, io 컨텍스트를 해제한다.
 			CtxtListFree();
 
 			if (g_hIOCP) {
@@ -460,11 +462,10 @@ BOOL CreateListenSocket(void) {
 	return(TRUE);
 }
 
-//
-// Worker thread that handles all I/O requests on any socket handle added to the IOCP.
-//
-UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 
+// IOCP에 추가된 모든 소켓 핸들에 대한 IO 요청을 다루는 워커 스레드
+UINT WINAPI WorkerThread(LPVOID WorkThreadContext)
+{
 	HANDLE hIOCP = (HANDLE)WorkThreadContext;
 	BOOL bSuccess = FALSE;
 	int nRet = 0;
@@ -492,43 +493,31 @@ UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 
 		if (lpPerSocketContext == NULL) {
 
-			//
-			// CTRL-C handler used PostQueuedCompletionStatus to post an I/O packet with
-			// a NULL CompletionKey (or if we get one for any reason).  It is time to exit.
-			//
+			// CTRL-C 핸들러는 NULL CompletionKey로 I/O 패킷을 게시한다.
+			// 이를 받는 경우 스레드를 종료한다.
 			return(0);
 		}
 
-		if (g_bEndServer) {
-
-			//
-			// main thread will do all cleanup needed - see finally block
-			//
+		if (g_bEndServer) 
+		{
+			// 메인 스레드가 서버 종료에 대해 필요한 정리를 수행할 것이다.
 			return(0);
 		}
 
 		if (!bSuccess || (bSuccess && (dwIoSize == 0))) {
 
-			//
-			// client connection dropped, continue to service remaining (and possibly 
-			// new) client connections
-			//
+			// 클라이언트 연결 종료 혹은 네트워크 오류. 해당 클라이언트와의 연결을 정리한다.
 			CloseClient(lpPerSocketContext, FALSE);
 			continue;
 		}
 
-		//
-		// determine what type of IO packet has completed by checking the PER_IO_CONTEXT 
-		// associated with this socket.  This will determine what action to take.
-		//
+		// 이 소켓과 연관된 PER_IO_CONTEXT를 확인하여 어떤 유형의 IO 패킷이 완료되었는지 확인, 처리한다.
 		lpIOContext = (PPER_IO_CONTEXT)lpOverlapped;
 		switch (lpIOContext->IOOperation) {
 		case ClientIoRead:
 
-			//
-			// a read operation has completed, post a write operation to echo the
-			// data back to the client using the same data buffer.
-			//
+			// 읽기 작업이 완료되면, 동일한 데이터 버퍼를 통해
+			// 클라이언트에게 데이터를 에코하기 위해 쓰기 작업을 게시합니다.
 			lpIOContext->IOOperation = ClientIoWrite;
 			lpIOContext->nTotalBytes = dwIoSize;
 			lpIOContext->nSentBytes = 0;
@@ -548,19 +537,14 @@ UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 
 		case ClientIoWrite:
 
-			//
-			// a write operation has completed, determine if all the data intended to be
-			// sent actually was sent.
-			//
+			// 쓰기 작업이 완료되면, 전송하려는 모든 데이터가 실제로 전송되었는지 확인합니다.
 			lpIOContext->IOOperation = ClientIoWrite;
 			lpIOContext->nSentBytes += dwIoSize;
 			dwFlags = 0;
 			if (lpIOContext->nSentBytes < lpIOContext->nTotalBytes) {
 
-				//
-				// the previous write operation didn't send all the data,
-				// post another send to complete the operation
-				//
+				// 이전 쓰기 작업이 모든 데이터를 보내지 못한 경우,
+				// 해당 작업을 완료하기 위해 쓰기 작업을 게시한다.
 				buffSend.buf = lpIOContext->Buffer + lpIOContext->nSentBytes;
 				buffSend.len = lpIOContext->nTotalBytes - lpIOContext->nSentBytes;
 				nRet = WSASend(lpPerSocketContext->Socket, &buffSend, 1,
@@ -576,9 +560,7 @@ UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 			}
 			else {
 
-				//
-				// previous write operation completed for this socket, post another recv
-				//
+				// 해당 소켓에 대한 이전 쓰기 작업이 완료된 경우, 읽기 작업을 게시한다.
 				lpIOContext->IOOperation = ClientIoRead;
 				dwRecvNumBytes = 0;
 				dwFlags = 0;
@@ -637,32 +619,22 @@ PPER_SOCKET_CONTEXT UpdateCompletionPort(SOCKET sd, IO_OPERATION ClientIo,
 }
 
 //
-//  Close down a connection with a client.  This involves closing the socket (when 
-//  initiated as a result of a CTRL-C the socket closure is not graceful).  Additionally, 
-//  any context data associated with that socket is free'd.
+// 클라이언트와의 연결을 종료한다.
+// 소켓을 닫는다.(CTRL-C로 인해 시작된 경우 소켓 종료는 우아하지 않습니다).
+// 또한, 해당 소켓과 관련된 모든 컨텍스트 데이터도 해제된다.
 //
 VOID CloseClient(PPER_SOCKET_CONTEXT lpPerSocketContext,
 	BOOL bGraceful) {
 
-	__try
-	{
-		EnterCriticalSection(&g_CriticalSection);
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER)
-	{
-		myprintf("EnterCriticalSection raised an exception.\n");
-		return;
-	}
+	EnterCriticalSection(&g_CriticalSection);
 
 	if (lpPerSocketContext) {
 		if (g_bVerbose)
 			myprintf("CloseClient: Socket(%d) connection closing (graceful=%s)\n",
 				lpPerSocketContext->Socket, (bGraceful ? "TRUE" : "FALSE"));
-		if (!bGraceful) {
-
-			//
-			// force the subsequent closesocket to be abortative.
-			//
+		if (!bGraceful) 
+		{
+			// 이어서 수행되는 closesocket이 강제 종료(abortive)되도록 한다.
 			LINGER  lingerStruct;
 
 			lingerStruct.l_onoff = 1;
@@ -768,7 +740,7 @@ VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 }
 
 //
-//  Remove a client context structure from the global list of context structures.
+// 컨텍스트 리스트로부터 특정 컨텍스트를 삭제한다.
 //
 VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 
@@ -793,57 +765,46 @@ VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 		pForward = lpPerSocketContext->pCtxtForward;
 
 
-		if ((pBack == NULL) && (pForward == NULL)) {
-
-			//
-			// This is the only node in the list to delete
-			//
+		if ((pBack == NULL) && (pForward == NULL)) 
+		{
+			// 해당 노드가 삭제할 유일한 노드인 경우
 			g_pCtxtList = NULL;
 		}
-		else if ((pBack == NULL) && (pForward != NULL)) {
-
-			//
-			// This is the start node in the list to delete
-			//
+		else if ((pBack == NULL) && (pForward != NULL)) 
+		{
+			// 해당 노드가 리스트의 첫 번째 노드인 경우
 			pForward->pCtxtBack = NULL;
 			g_pCtxtList = pForward;
 		}
-		else if ((pBack != NULL) && (pForward == NULL)) {
-
-			//
-			// This is the end node in the list to delete
-			//
+		else if ((pBack != NULL) && (pForward == NULL)) 
+		{
+			// 해당 노드가 리스트의 마지막 노드인 경우
 			pBack->pCtxtForward = NULL;
 		}
-		else if (pBack && pForward) {
-
-			//
-			// Neither start node nor end node in the list
-			//
+		else if (pBack && pForward) 
+		{
+			// 해당 노드가 리스트의 중간에 있는 경우
 			pBack->pCtxtForward = pForward;
 			pForward->pCtxtBack = pBack;
 		}
 
-		//
-		// Free all i/o context structures per socket
-		//
+		// 소켓의 모든 io 컨텍스트 해제
 		pTempIO = (PPER_IO_CONTEXT)(lpPerSocketContext->pIOContext);
-		do {
+		while(pTempIO)
+		{
 			pNextIO = (PPER_IO_CONTEXT)(pTempIO->pIOContextForward);
-			if (pTempIO) {
 
-				//
-				//The overlapped structure is safe to free when only the posted i/o has
-				//completed. Here we only need to test those posted but not yet received 
-				//by PQCS in the shutdown process.
-				//
-				if (g_bEndServer)
-					while (!HasOverlappedIoCompleted((LPOVERLAPPED)pTempIO)) Sleep(0);
-				xfree(pTempIO);
-				pTempIO = NULL;
+			if (g_bEndServer)
+			{
+				// 종료 상황에서의 컨텍스트 해제
+				// GetQueuedCompletionStatus에 의해 해제되지 않은 컨텍스트에 대해서만 확인한다.
+				while (!HasOverlappedIoCompleted((LPOVERLAPPED)pTempIO))
+					Sleep(0);
 			}
+			xfree(pTempIO);
+
 			pTempIO = pNextIO;
-		} while (pNextIO);
+		}
 
 		xfree(lpPerSocketContext);
 		lpPerSocketContext = NULL;
