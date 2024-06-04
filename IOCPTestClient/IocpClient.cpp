@@ -45,6 +45,7 @@
 #pragma warning(disable:4706 4267)
 #endif 
 
+#include <process.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <winsock2.h>
@@ -76,12 +77,12 @@ static OPTIONS default_options = { "localhost", (char*)"5001", 1, 4096, FALSE };
 static OPTIONS g_Options;
 static THREADINFO g_ThreadInfo;
 static BOOL g_bEndClient = FALSE;
-static WSAEVENT g_hCleanupEvent[1];
+static WSAEVENT g_hCleanupEvent[1];	// 이벤트 개체
 
 static BOOL WINAPI CtrlHandler(DWORD dwEvent);
 static BOOL ValidOptions(char* argv[], int argc);
 static VOID Usage(char* szProgramname, OPTIONS* pOptions);
-static DWORD WINAPI EchoThread(LPVOID lpParameter);
+static UINT WINAPI EchoThread(LPVOID lpParameter);
 static BOOL CreateConnectedSocket(int nThreadNum);
 static BOOL SendBuffer(int nThreadNum, char* outbuf);
 static BOOL RecvBuffer(int nThreadNum, char* inbuf);
@@ -91,7 +92,7 @@ int __cdecl main(int argc, char* argv[]) {
 
 	OSVERSIONINFO verInfo = { 0 };
 	WSADATA WSAData;
-	DWORD dwThreadId = 0;
+	UINT dwThreadId = 0;
 	DWORD dwRet = 0;
 	BOOL bInitError = FALSE;
 	int nThreadNum[MAXTHREADS];
@@ -126,6 +127,7 @@ int __cdecl main(int argc, char* argv[]) {
 		return(1);
 	}
 
+	// 이벤트 개체 생성
 	if (WSA_INVALID_EVENT == (g_hCleanupEvent[0] = WSACreateEvent()))
 	{
 		myprintf("WSACreateEvent() failed: %d\n", WSAGetLastError());
@@ -151,23 +153,17 @@ int __cdecl main(int argc, char* argv[]) {
 	//
 	for (i = 0; i < g_Options.nTotalThreads && !bInitError; i++) {
 
-		//
-		// if CTRL-C is pressed before all the sockets have connected, closure of
-		// the program could take a little while, especially if the server is 
-		// down and we have to wait for connect to fail.  Checking for this
-		// global flag allows us to shortcircuit that.
-		//
+		// CTRL-C가 모든 소켓이 연결되기 전에 눌리면,
+		// 특히 서버가 다운되어 있고 연결 실패를 기다려야 하는 경우 프로그램 종료에 시간이 좀 걸릴 수 있습니다.
+		// 이 전역 플래그를 확인하면 그 과정을 단축할 수 있습니다.
 		if (g_bEndClient)
 			break;
-		else if (CreateConnectedSocket(i)) {
 
-			//
-			// a unique memory location needs to be passed into each thread, 
-			// otherwise the value would change by the time all the threads 
-			// get a chance to run.
-			//
+		else if (CreateConnectedSocket(i)) {
+			// 각 스레드에 고유한 메모리 위치를 전달해야 합니다.
+			// 그렇지 않으면 모든 스레드가 실행될 때쯤 값이 변경될 수 있습니다.
 			nThreadNum[i] = i;
-			g_ThreadInfo.hThread[i] = CreateThread(NULL, 0, EchoThread, (LPVOID)&nThreadNum[i], 0, &dwThreadId);
+			g_ThreadInfo.hThread[i] = (HANDLE)_beginthreadex(NULL, 0, EchoThread, &nThreadNum[i], 0, &dwThreadId);
 			if (g_ThreadInfo.hThread[i] == NULL) {
 				myprintf("CreateThread(%d) failed: %d\n", i, GetLastError());
 				bInitError = TRUE;
@@ -216,7 +212,7 @@ int __cdecl main(int argc, char* argv[]) {
 //     buffer to the server.  Upon receipt of the echo from the server, a
 //     simple check is performed to check the integrity of the transfer.
 //
-static DWORD WINAPI EchoThread(LPVOID lpParameter) {
+static UINT WINAPI EchoThread(LPVOID lpParameter) {
 
 	char* inbuf = NULL;
 	char* outbuf = NULL;
@@ -270,12 +266,9 @@ static DWORD WINAPI EchoThread(LPVOID lpParameter) {
 	return(TRUE);
 }
 
-//
-// Abstract:
-//     Create a socket and connect to the server process.
-//
-static BOOL CreateConnectedSocket(int nThreadNum) {
-
+// 소켓을 생성하고 서버와 연결한다.
+static BOOL CreateConnectedSocket(int nThreadNum)
+{
 	BOOL bRet = TRUE;
 	int nRet = 0;
 	struct addrinfo hints = { 0 };
@@ -532,7 +525,6 @@ static BOOL WINAPI CtrlHandler(DWORD dwEvent) {
 }
 
 static int myprintf(const char* lpFormat, ...) {
-
 	int nLen = 0;
 	int nRet = 0;
 	char cBuffer[512] = { '\0' };

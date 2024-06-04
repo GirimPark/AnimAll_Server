@@ -61,27 +61,21 @@ BOOL WINAPI CtrlHandler(
 // 특정 도네임, 포트 정보로 주소 정보를 얻고 소켓을 생성, 설정한다.
 BOOL CreateListenSocket(void);
 
-BOOL CreateAcceptSocket(
-    BOOL fUpdateIOCP
-);
-
 UINT WINAPI WorkerThread(
     LPVOID WorkContext
 );
 
 // 소켓에 소켓 컨텍스트를 할당하여 완료 포트와 연결하고,
 // 소켓 컨텍스트를 목록에 추가한다.
+// (리슨 소켓은 전역적이므로 목록에 추가하지 않는다.)
 PPER_SOCKET_CONTEXT UpdateCompletionPort(
     SOCKET s,
     IO_OPERATION ClientIo,
     BOOL bAddToList
 );
-//
-// bAddToList is FALSE for listening socket, and TRUE for connection sockets.
-// As we maintain the context for listening socket in a global structure, we
-// don't need to add it to the list.
-//
 
+// 오류 발생 시 소켓 컨텍스트, io 컨텍스트 해제
+// 컨텍스트 리스트 정리
 VOID CloseClient(
     PPER_SOCKET_CONTEXT lpPerSocketContext,
     BOOL bGraceful
@@ -93,6 +87,7 @@ PPER_SOCKET_CONTEXT CtxtAllocate(
     IO_OPERATION ClientIO
 );
 
+// 소켓 컨텍스트 리스트 해제
 VOID CtxtListFree(
 );
 

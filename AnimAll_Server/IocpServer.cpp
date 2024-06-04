@@ -384,9 +384,7 @@ BOOL CreateListenSocket(void) {
 	struct addrinfo hints = { 0 };
 	struct addrinfo* addrlocal = NULL;
 
-	//
-	// Resolve the interface
-	//
+	// 로컬 머신의 네트워크 인터페이스 통해 지정된 포트를 사용하는 소켓 설정
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
@@ -703,9 +701,7 @@ PPER_SOCKET_CONTEXT CtxtAllocate(SOCKET sd, IO_OPERATION ClientIO) {
 	return(lpPerSocketContext);
 }
 
-//
-//  Add a client connection context structure to the global list of context structures.
-//
+// 컨텍스트 리스트에 클라이언트 연결 컨텍스트를 추가한다.
 VOID CtxtListAddTo(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 
 	PPER_SOCKET_CONTEXT     pTemp;
