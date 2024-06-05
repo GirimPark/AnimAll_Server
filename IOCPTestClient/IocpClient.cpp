@@ -26,7 +26,7 @@
 //
 //      Another point worth noting is that the Win32 API CreateThread() does not 
 //      initialize the C Runtime and therefore, C runtime functions such as 
-//      printf() have been avoid or rewritten (see myprintf()) to use just Win32 APIs.
+//      printf() have been avoid or rewritten (see printf()) to use just Win32 APIs.
 //
 // Entry Points:
 //      main - this is where it all starts
@@ -107,7 +107,7 @@ int __cdecl main(int argc, char* argv[]) {
 		// Since this application can heavily stress system resources
 		// we decided to limit running it on NT.
 		//
-		myprintf("Please run %s only on NT, thank you\n", argv[0]);
+		printf("Please run %s only on NT, thank you\n", argv[0]);
 		return(0);
 	}
 
@@ -123,14 +123,14 @@ int __cdecl main(int argc, char* argv[]) {
 		return(1);
 
 	if ((nRet = WSAStartup(MAKEWORD(2, 2), &WSAData)) != 0) {
-		myprintf("WSAStartup() failed: %d", nRet);
+		printf("WSAStartup() failed: %d", nRet);
 		return(1);
 	}
 
 	// 이벤트 개체 생성
 	if (WSA_INVALID_EVENT == (g_hCleanupEvent[0] = WSACreateEvent()))
 	{
-		myprintf("WSACreateEvent() failed: %d\n", WSAGetLastError());
+		printf("WSACreateEvent() failed: %d\n", WSAGetLastError());
 		WSACleanup();
 		return(1);
 	}
@@ -139,7 +139,7 @@ int __cdecl main(int argc, char* argv[]) {
 	// be able to gracefully handle CTRL-C and close handles
 	//
 	if (!SetConsoleCtrlHandler(CtrlHandler, TRUE)) {
-		myprintf("SetConsoleCtrlHandler() failed: %d\n", GetLastError());
+		printf("SetConsoleCtrlHandler() failed: %d\n", GetLastError());
 		if (g_hCleanupEvent[0] != WSA_INVALID_EVENT) {
 			WSACloseEvent(g_hCleanupEvent[0]);
 			g_hCleanupEvent[0] = WSA_INVALID_EVENT;
@@ -165,7 +165,7 @@ int __cdecl main(int argc, char* argv[]) {
 			nThreadNum[i] = i;
 			g_ThreadInfo.hThread[i] = (HANDLE)_beginthreadex(NULL, 0, EchoThread, &nThreadNum[i], 0, &dwThreadId);
 			if (g_ThreadInfo.hThread[i] == NULL) {
-				myprintf("CreateThread(%d) failed: %d\n", i, GetLastError());
+				printf("CreateThread(%d) failed: %d\n", i, GetLastError());
 				bInitError = TRUE;
 				break;
 			}
@@ -179,15 +179,15 @@ int __cdecl main(int argc, char* argv[]) {
 		//
 		dwRet = WaitForMultipleObjects(g_Options.nTotalThreads, g_ThreadInfo.hThread, TRUE, INFINITE);
 		if (dwRet == WAIT_FAILED)
-			myprintf("WaitForMultipleObject(): %d\n", GetLastError());
+			printf("WaitForMultipleObject(): %d\n", GetLastError());
 	}
 
 	if (!GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0)) {
-		myprintf("GenerateConsoleCtrlEvent() failed: %d\n", GetLastError());
+		printf("GenerateConsoleCtrlEvent() failed: %d\n", GetLastError());
 	};
 
 	if (WSAWaitForMultipleEvents(1, g_hCleanupEvent, TRUE, WSA_INFINITE, FALSE) == WSA_WAIT_FAILED) {
-		myprintf("WSAWaitForMultipleEvents() failed: %d\n", WSAGetLastError());
+		printf("WSAWaitForMultipleEvents() failed: %d\n", WSAGetLastError());
 	};
 
 	if (g_hCleanupEvent[0] != WSA_INVALID_EVENT) {
@@ -212,14 +212,14 @@ int __cdecl main(int argc, char* argv[]) {
 //     buffer to the server.  Upon receipt of the echo from the server, a
 //     simple check is performed to check the integrity of the transfer.
 //
-static UINT WINAPI EchoThread(LPVOID lpParameter) {
-
+static UINT WINAPI EchoThread(LPVOID lpParameter)
+{
 	char* inbuf = NULL;
 	char* outbuf = NULL;
 	int* pArg = (int*)lpParameter;
 	int nThreadNum = *pArg;
 
-	myprintf("Starting thread %d\n", nThreadNum);
+	printf("Starting thread %d\n", nThreadNum);
 
 	inbuf = (char*)xmalloc(g_Options.nBufSize);
 	outbuf = (char*)xmalloc(g_Options.nBufSize);
@@ -229,7 +229,8 @@ static UINT WINAPI EchoThread(LPVOID lpParameter) {
 		//
 		// NOTE data possible data loss with INT conversion to BYTE
 		//
-		FillMemory(outbuf, g_Options.nBufSize, (BYTE)nThreadNum);
+		FillMemory(outbuf, g_Options.nBufSize, (BYTE)nThreadNum);	// memset
+		memcpy(outbuf, "echo", 5);
 
 		while (TRUE) {
 
@@ -238,14 +239,17 @@ static UINT WINAPI EchoThread(LPVOID lpParameter) {
 			// back.  Just do a simple minded comparison.
 			//
 			if (SendBuffer(nThreadNum, outbuf) &&
-				RecvBuffer(nThreadNum, inbuf)) {
+				RecvBuffer(nThreadNum, inbuf)) 
+			{
 				if ((inbuf[0] == outbuf[0]) &&
-					(inbuf[g_Options.nBufSize - 1] == outbuf[g_Options.nBufSize - 1])) {
+					(inbuf[g_Options.nBufSize - 1] == outbuf[g_Options.nBufSize - 1])) 
+				{
 					if (g_Options.bVerbose)
-						myprintf("ack(%d)\n", nThreadNum);
+						printf("ack(%d)\n", nThreadNum);
 				}
-				else {
-					myprintf("nak(%d) in[0]=%d, out[0]=%d in[%d]=%d out[%d]%d\n",
+				else 
+				{
+					printf("nak(%d) in[0]=%d, out[0]=%d in[%d]=%d out[%d]%d\n",
 						nThreadNum,
 						inbuf[0], outbuf[0],
 						g_Options.nBufSize - 1, inbuf[g_Options.nBufSize - 1],
@@ -283,18 +287,18 @@ static BOOL CreateConnectedSocket(int nThreadNum)
 	hints.ai_protocol = IPPROTO_TCP;
 
 	if (getaddrinfo(g_Options.szHostname, g_Options.port, &hints, &addr_srv) != 0) {
-		myprintf("getaddrinfo() failed with error %d\n", WSAGetLastError());
+		printf("getaddrinfo() failed with error %d\n", WSAGetLastError());
 		bRet = FALSE;
 	}
 
 	if (addr_srv == NULL) {
-		myprintf("getaddrinfo() failed to resolve/convert the interface\n");
+		printf("getaddrinfo() failed to resolve/convert the interface\n");
 		bRet = FALSE;
 	}
 	else {
 		g_ThreadInfo.sd[nThreadNum] = socket(addr_srv->ai_family, addr_srv->ai_socktype, addr_srv->ai_protocol);
 		if (g_ThreadInfo.sd[nThreadNum] == INVALID_SOCKET) {
-			myprintf("socket() failed: %d\n", WSAGetLastError());
+			printf("socket() failed: %d\n", WSAGetLastError());
 			bRet = FALSE;
 		}
 	}
@@ -302,11 +306,11 @@ static BOOL CreateConnectedSocket(int nThreadNum)
 	if (bRet != FALSE) {
 		nRet = connect(g_ThreadInfo.sd[nThreadNum], addr_srv->ai_addr, (int)addr_srv->ai_addrlen);
 		if (nRet == SOCKET_ERROR) {
-			myprintf("connect(thread %d) failed: %d\n", nThreadNum, WSAGetLastError());
+			printf("connect(thread %d) failed: %d\n", nThreadNum, WSAGetLastError());
 			bRet = FALSE;
 		}
 		else
-			myprintf("connected(thread %d)\n", nThreadNum);
+			printf("connected(thread %d)\n", nThreadNum);
 
 		freeaddrinfo(addr_srv);
 	}
@@ -329,12 +333,12 @@ static BOOL SendBuffer(int nThreadNum, char* outbuf) {
 	while (nTotalSend < g_Options.nBufSize) {
 		nSend = send(g_ThreadInfo.sd[nThreadNum], bufp, g_Options.nBufSize - nTotalSend, 0);
 		if (nSend == SOCKET_ERROR) {
-			myprintf("send(thread=%d) failed: %d\n", nThreadNum, WSAGetLastError());
+			printf("send(thread=%d) failed: %d\n", nThreadNum, WSAGetLastError());
 			bRet = FALSE;
 			break;
 		}
 		else if (nSend == 0) {
-			myprintf("connection closed\n");
+			printf("connection closed\n");
 			bRet = FALSE;
 			break;
 		}
@@ -343,6 +347,9 @@ static BOOL SendBuffer(int nThreadNum, char* outbuf) {
 			bufp += nSend;
 		}
 	}
+
+	if (strlen(outbuf) != 0)
+		printf("send : %s\n", outbuf);
 
 	return(bRet);
 }
@@ -362,12 +369,12 @@ static BOOL RecvBuffer(int nThreadNum, char* inbuf) {
 	while (nTotalRecv < g_Options.nBufSize) {
 		nRecv = recv(g_ThreadInfo.sd[nThreadNum], bufp, g_Options.nBufSize - nTotalRecv, 0);
 		if (nRecv == SOCKET_ERROR) {
-			myprintf("recv(thread=%d) failed: %d\n", nThreadNum, WSAGetLastError());
+			printf("recv(thread=%d) failed: %d\n", nThreadNum, WSAGetLastError());
 			bRet = FALSE;
 			break;
 		}
 		else if (nRecv == 0) {
-			myprintf("connection closed\n");
+			printf("connection closed\n");
 			bRet = FALSE;
 			break;
 		}
@@ -376,6 +383,9 @@ static BOOL RecvBuffer(int nThreadNum, char* inbuf) {
 			bufp += nRecv;
 		}
 	}
+
+	if(strlen(inbuf) != 0)
+		printf("recv : %s\n", inbuf);
 
 	return(bRet);
 }
@@ -424,14 +434,14 @@ static BOOL ValidOptions(char* argv[], int argc) {
 				break;
 
 			default:
-				myprintf("  unknown options flag %s\n", argv[i]);
+				printf("  unknown options flag %s\n", argv[i]);
 				Usage(argv[0], &default_options);
 				return(FALSE);
 				break;
 			}
 		}
 		else {
-			myprintf("  unknown option %s\n", argv[i]);
+			printf("  unknown option %s\n", argv[i]);
 			Usage(argv[0], &default_options);
 			return(FALSE);
 		}
@@ -446,18 +456,18 @@ static BOOL ValidOptions(char* argv[], int argc) {
 //
 static VOID Usage(char* szProgramname, OPTIONS* pOptions) {
 
-	myprintf("usage:\n%s [-b:#] [-e:#] [-n:host] [-t:#] [-v]\n",
+	printf("usage:\n%s [-b:#] [-e:#] [-n:host] [-t:#] [-v]\n",
 		szProgramname);
-	myprintf("%s -?\n", szProgramname);
-	myprintf("  -?\t\tDisplay this help\n");
-	myprintf("  -b:bufsize\tSize of send/recv buffer; in 1K increments (Def:%d)\n",
+	printf("%s -?\n", szProgramname);
+	printf("  -?\t\tDisplay this help\n");
+	printf("  -b:bufsize\tSize of send/recv buffer; in 1K increments (Def:%d)\n",
 		pOptions->nBufSize);
-	myprintf("  -e:port\tEndpoint number (port) to use (Def:%d)\n",
+	printf("  -e:port\tEndpoint number (port) to use (Def:%d)\n",
 		pOptions->port);
-	myprintf("  -n:host\tAct as the client and connect to 'host' (Def:%s)\n",
+	printf("  -n:host\tAct as the client and connect to 'host' (Def:%s)\n",
 		pOptions->szHostname);
-	myprintf("  -t:#\tNumber of threads to use\n");
-	myprintf("  -v\t\tVerbose, print an ack when echo received and verified\n");
+	printf("  -t:#\tNumber of threads to use\n");
+	printf("  -v\t\tVerbose, print an ack when echo received and verified\n");
 	return;
 }
 
@@ -473,7 +483,7 @@ static BOOL WINAPI CtrlHandler(DWORD dwEvent) {
 	case CTRL_SHUTDOWN_EVENT:
 	case CTRL_CLOSE_EVENT:
 
-		myprintf("Closing handles and sockets\n");
+		printf("Closing handles and sockets\n");
 
 		//
 		// Temporarily disables processing of CTRL_C_EVENT signal.
@@ -501,7 +511,7 @@ static BOOL WINAPI CtrlHandler(DWORD dwEvent) {
 
 					dwRet = WaitForSingleObject(g_ThreadInfo.hThread[i], INFINITE);
 					if (dwRet == WAIT_FAILED)
-						myprintf("WaitForSingleObject(): %d\n", GetLastError());
+						printf("WaitForSingleObject(): %d\n", GetLastError());
 
 					CloseHandle(g_ThreadInfo.hThread[i]);
 					g_ThreadInfo.hThread[i] = INVALID_HANDLE_VALUE;
