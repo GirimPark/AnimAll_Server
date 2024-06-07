@@ -86,7 +86,6 @@ static UINT WINAPI EchoThread(LPVOID lpParameter);
 static BOOL CreateConnectedSocket(int nThreadNum);
 static BOOL SendBuffer(int nThreadNum, char* outbuf);
 static BOOL RecvBuffer(int nThreadNum, char* inbuf);
-static int myprintf(const char* lpFormat, ...);
 
 int __cdecl main(int argc, char* argv[]) {
 
@@ -532,29 +531,4 @@ static BOOL WINAPI CtrlHandler(DWORD dwEvent) {
 	WSASetEvent(g_hCleanupEvent[0]);
 
 	return(TRUE);
-}
-
-static int myprintf(const char* lpFormat, ...) {
-	int nLen = 0;
-	int nRet = 0;
-	char cBuffer[512] = { '\0' };
-	va_list arglist;
-	HANDLE hOut = NULL;
-	HRESULT hRet;
-
-	ZeroMemory(cBuffer, sizeof(cBuffer));
-
-	va_start(arglist, lpFormat);
-
-	nLen = lstrlenA(lpFormat);
-
-	hRet = StringCchVPrintfA(cBuffer, 512, lpFormat, arglist);
-
-	if (nRet >= nLen || GetLastError() == 0) {
-		hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-		if (hOut != INVALID_HANDLE_VALUE)
-			WriteConsole(hOut, cBuffer, lstrlenA(cBuffer), (LPDWORD)&nLen, NULL);
-	}
-
-	return nLen;
 }

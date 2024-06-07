@@ -112,8 +112,6 @@ PPER_SOCKET_CONTEXT g_pCtxtList = NULL;		// linked list of context info structur
 
 CRITICAL_SECTION g_CriticalSection;		// guard access to the global context list
 
-int myprintf(const char* lpFormat, ...);
-
 void __cdecl main(int argc, char* argv[]) {
 
 	SYSTEM_INFO systemInfo;
@@ -832,33 +830,4 @@ VOID CtxtListFree() {
 
 	LeaveCriticalSection(&g_CriticalSection);
 	return;
-}
-
-//
-// Our own printf. This is done because calling printf from multiple
-// threads can AV. The standard out for WriteConsole is buffered...
-//
-int myprintf(const char* lpFormat, ...) {
-
-	int nLen = 0;
-	int nRet = 0;
-	char cBuffer[512];
-	va_list arglist;
-	HANDLE hOut = NULL;
-	HRESULT hRet;
-
-	ZeroMemory(cBuffer, sizeof(cBuffer));
-
-	va_start(arglist, lpFormat);
-
-	nLen = lstrlenA(lpFormat);
-	hRet = StringCchVPrintfA(cBuffer, 512, lpFormat, arglist);
-
-	if (nRet >= nLen || GetLastError() == 0) {
-		hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-		if (hOut != INVALID_HANDLE_VALUE)
-			WriteConsole(hOut, cBuffer, lstrlenA(cBuffer), (LPDWORD)&nLen, NULL);
-	}
-
-	return nLen;
 }
