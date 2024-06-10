@@ -118,7 +118,8 @@ void __cdecl main(int argc, char* argv[]) {
 
 	InitializeCriticalSection(&g_CriticalSection);
 
-	while (g_bRestart) {
+	while (g_bRestart) 
+	{
 		g_bRestart = FALSE;
 		g_bEndServer = FALSE;
 		WSAResetEvent(g_hCleanupEvent[0]);
@@ -197,8 +198,9 @@ void __cdecl main(int argc, char* argv[]) {
 			}
 
 			if (g_pCtxtListenSocket) {
+				// 리슨 소켓 컨텍스트를 해제하기 전에 해당 소켓에 대한 i/o 작업이 완료되기를 대기
 				while (!HasOverlappedIoCompleted((LPOVERLAPPED)&g_pCtxtListenSocket->pIOContext->Overlapped))
-					Sleep(0);
+					Sleep(0); //! ctrl+break걸면 여기서 안넘어감
 
 				if (g_pCtxtListenSocket->pIOContext->SocketAccept != INVALID_SOCKET)
 					closesocket(g_pCtxtListenSocket->pIOContext->SocketAccept);
@@ -507,8 +509,8 @@ BOOL CreateAcceptSocket(BOOL fUpdateIOCP) {
 	//
 	nRet = g_pCtxtListenSocket->fnAcceptEx(g_sdListen, g_pCtxtListenSocket->pIOContext->SocketAccept,
 		(LPVOID)(g_pCtxtListenSocket->pIOContext->Buffer),
-		MAX_BUFF_SIZE - (2 * (sizeof(SOCKADDR_STORAGE) + 16)),
-		sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16,
+		MAX_BUFF_SIZE - (2 * (sizeof(SOCKADDR_STORAGE) + 16)), // 소켓 주소 정보 제외한 데이터 길이
+		sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16, 
 		&dwRecvNumBytes,
 		(LPOVERLAPPED) & (g_pCtxtListenSocket->pIOContext->Overlapped));
 	if (nRet == SOCKET_ERROR && (ERROR_IO_PENDING != WSAGetLastError())) {
@@ -597,13 +599,12 @@ UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 		case ClientIoAccept:
 
 			//
-			// When the AcceptEx function returns, the socket sAcceptSocket is 
-			// in the default state for a connected socket. The socket sAcceptSocket 
-			// does not inherit the properties of the socket associated with 
-			// sListenSocket parameter until SO_UPDATE_ACCEPT_CONTEXT is set on 
-			// the socket. Use the setsockopt function to set the SO_UPDATE_ACCEPT_CONTEXT 
-			// option, specifying sAcceptSocket as the socket handle and sListenSocket 
-			// as the option value. 
+			// AcceptEx 함수가 반환되면, sAcceptSocket 소켓은 연결된 소켓의 기본 상태에 있습니다.
+			// sAcceptSocket 소켓은 sListenSocket 매개변수와 연관된 소켓의 속성을 상속받지 않으며, 이는 SO_UPDATE_ACCEPT_CONTEXT가 소켓에 설정될 때까지 유지됩니다.
+			// setsockopt 함수를 사용하여 SO_UPDATE_ACCEPT_CONTEXT 옵션을 설정해야 합니다.
+			// 이때, sAcceptSocket을 소켓 핸들로 지정하고 sListenSocket을 옵션 값으로 지정합니다.
+			// 
+			// acceptSocket은 리슨 소켓의 속성을 상속받아야 한다. 소켓 옵션의 일관성 유지, 소켓의 올바른 동작 보장, 성능 최적화, 연결 관리의 일관성 등
 			//
 			nRet = setsockopt(
 				lpPerSocketContext->pIOContext->SocketAccept,
@@ -637,6 +638,7 @@ UINT WINAPI WorkerThread(LPVOID WorkThreadContext) {
 				return(0);
 			}
 
+			// Accept와 함께 Recv가 이루어졌다면
 			if (dwIoSize) {
 				lpAcceptSocketContext->pIOContext->IOOperation = ClientIoWrite;
 				lpAcceptSocketContext->pIOContext->nTotalBytes = dwIoSize;
@@ -1043,7 +1045,8 @@ VOID CtxtListDeleteFrom(PPER_SOCKET_CONTEXT lpPerSocketContext) {
 				//by PQCS in the shutdown process.
 				//
 				if (g_bEndServer)
-					while (!HasOverlappedIoCompleted((LPOVERLAPPED)pTempIO)) Sleep(0);
+					while (!HasOverlappedIoCompleted((LPOVERLAPPED)pTempIO)) 
+						Sleep(0);
 				xfree(pTempIO);
 				pTempIO = NULL;
 			}
