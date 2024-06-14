@@ -60,7 +60,7 @@
 
 const char* g_Port = DEFAULT_PORT;
 BOOL g_bEndServer = FALSE;			// set to TRUE on CTRL-C
-BOOL g_bRestart = TRUE;				// set to TRUE to CTRL-BRK
+//BOOL g_bRestart = TRUE;				// set to TRUE to CTRL-BRK
 BOOL g_bVerbose = FALSE;
 HANDLE g_hIOCP = INVALID_HANDLE_VALUE;
 SOCKET g_sdListen = INVALID_SOCKET;
@@ -118,9 +118,7 @@ void __cdecl main(int argc, char* argv[]) {
 
 	InitializeCriticalSection(&g_CriticalSection);
 
-	while (g_bRestart) 
-	{
-		g_bRestart = FALSE;
+	
 		g_bEndServer = FALSE;
 		WSAResetEvent(g_hCleanupEvent[0]);
 
@@ -225,13 +223,9 @@ void __cdecl main(int argc, char* argv[]) {
 			}
 		} //finally
 
-		if (g_bRestart) {
-			printf("\niocpserverex is restarting...\n");
-		}
-		else
-			printf("\niocpserverex is exiting...\n");
+		
 
-	} //while (g_bRestart)
+
 
 	DeleteCriticalSection(&g_CriticalSection);
 	if (g_hCleanupEvent[0] != WSA_INVALID_EVENT) {
@@ -287,7 +281,7 @@ BOOL WINAPI CtrlHandler(DWORD dwEvent) {
 
 	switch (dwEvent) {
 	case CTRL_BREAK_EVENT:
-		g_bRestart = TRUE;
+		//g_bRestart = TRUE;
 	case CTRL_C_EVENT:
 	case CTRL_LOGOFF_EVENT:
 	case CTRL_SHUTDOWN_EVENT:
